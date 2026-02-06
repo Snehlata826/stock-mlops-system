@@ -164,11 +164,12 @@ chmod +x scripts/*.sh
 bash scripts/run_training.sh AAPL 2y
 
 # On Windows (use Git Bash or WSL), or run manually:
-# python src/ingestion/fetch_historical.py --ticker AAPL --period 2y
-# python src/features/feature_engineering.py --mode train
-# python src/training/train.py
-# python src/training/evaluate.py
+# python -m src.ingestion.fetch_historical --ticker {} --period 2y
+# python -m src.features.feature_engineering --mode train --ticker {}
+# python -m src.training.train --ticker {}
+# python -m src.training.evaluate --ticker {}
 ```
+
 
 This will:
 1. ✅ Fetch 2 years of AAPL historical data

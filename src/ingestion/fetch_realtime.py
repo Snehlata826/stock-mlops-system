@@ -6,14 +6,18 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 
-from src.common.config import RAW_DATA_DIR, DEFAULT_TICKER
-from src.common.utils import logger
+from src.common.config import RAW_DATA_DIR
+from src.common.utils import logger, validate_asset
 
 load_dotenv()
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 
-CACHE_FILE = RAW_DATA_DIR / "realtime_prices.csv"
 CACHE_TTL_SECONDS = 60  # 1 minute cooldown
+
+
+def _cache_file_for_ticker(ticker: str) -> Path:
+    """Create per-asset cache file"""
+    return RAW_DATA_DIR / f"realtime_{ticker}.csv"
 
 
 def is_cache_fresh(path: Path, ttl: int) -> bool:
@@ -23,21 +27,25 @@ def is_cache_fresh(path: Path, ttl: int) -> bool:
 
 
 def fetch_realtime_data(
-    ticker: str = DEFAULT_TICKER,
+    ticker: str,
     interval: str = "15min",
-    force_refresh: bool = False,   # ✅ NEW
+    force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
     Fetch near real-time intraday data with caching, rate-limit handling,
     and safe fallback to historical data.
     """
 
+    # ✅ Validate asset (Top 3 + Gold only)
+    validate_asset(ticker)
+
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    cache_file = _cache_file_for_ticker(ticker)
 
     # 1️⃣ Use cache if fresh (unless forced refresh)
-    if not force_refresh and is_cache_fresh(CACHE_FILE, CACHE_TTL_SECONDS):
-        logger.info("Using cached intraday data")
-        return pd.read_csv(CACHE_FILE)
+    if not force_refresh and is_cache_fresh(cache_file, CACHE_TTL_SECONDS):
+        logger.info(f"Using cached intraday data for {ticker}")
+        return pd.read_csv(cache_file)
 
     if not ALPHA_VANTAGE_API_KEY:
         raise ValueError("ALPHA_VANTAGE_API_KEY not set")
@@ -55,21 +63,20 @@ def fetch_realtime_data(
 
     data = requests.get(url, timeout=30).json()
 
-    # 2️⃣ Handle rate limit / info messages
+    # 2️⃣ Handle rate limits
     if "Note" in data or "Information" in data:
         logger.warning("Rate-limited by Alpha Vantage")
 
-        if CACHE_FILE.exists():
-            logger.info("Using cached intraday data")
-            return pd.read_csv(CACHE_FILE)
+        if cache_file.exists():
+            logger.info(f"Using cached data for {ticker}")
+            return pd.read_csv(cache_file)
 
         logger.warning("No cache found. Falling back to historical slice")
         df = pd.read_csv("data/raw/historical_prices.csv").tail(50)
-        df.to_csv(CACHE_FILE, index=False)
-        logger.info("Saved fallback data as realtime_prices.csv")
+        df.to_csv(cache_file, index=False)
         return df
 
-    # 3️⃣ Handle valid intraday data
+    # 3️⃣ Valid intraday data
     key = f"Time Series ({interval})"
     if key in data:
         df = pd.DataFrame.from_dict(data[key], orient="index").astype(float)
@@ -90,15 +97,14 @@ def fetch_realtime_data(
         df.reset_index(inplace=True)
         df.rename(columns={"index": "Date"}, inplace=True)
 
-        df.to_csv(CACHE_FILE, index=False)
-        logger.success(f"Saved {len(df)} rows → {CACHE_FILE}")
+        df.to_csv(cache_file, index=False)
+        logger.success(f"Saved {len(df)} rows → {cache_file}")
         return df
 
-    # 4️⃣ Final fallback (market closed / unexpected response)
+    # 4️⃣ Final fallback
     logger.warning("Intraday data unavailable. Falling back to historical slice")
     df = pd.read_csv("data/raw/historical_prices.csv").tail(50)
-    df.to_csv(CACHE_FILE, index=False)
-    logger.info("Saved fallback data as realtime_prices.csv")
+    df.to_csv(cache_file, index=False)
     return df
 
 
@@ -106,7 +112,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ticker", default=DEFAULT_TICKER)
+    parser.add_argument("--ticker", required=True)
     parser.add_argument("--interval", default="15min")
 
     args = parser.parse_args()

@@ -4,84 +4,74 @@ from pathlib import Path
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from src.common.config import MLFLOW_TRACKING_URI, MODEL_NAME
+
+from src.common.config import MLFLOW_TRACKING_URI
 from src.common.utils import logger
 
-class ModelLoader:
-    """Load and cache production model from MLflow"""
-    
-    def __init__(self):
-        self.model = None
-        self.model_version = None
-        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    
-    def load_production_model(self):
-        """Load model from Production stage"""
-        try:
-            model_uri = f"models:/{MODEL_NAME}/Production"
-            logger.info(f"Loading production model: {model_uri}")
-            
-            self.model = mlflow.xgboost.load_model(model_uri)
-            
-            # Get model version
-            client = mlflow.MlflowClient()
-            model_versions = client.get_latest_versions(MODEL_NAME, stages=["Production"])
-            
-            if model_versions:
-                self.model_version = model_versions[0].version
-                logger.info(f"✓ Loaded model version {self.model_version}")
-            
-            return self.model
-            
-        except Exception as e:
-            logger.warning(f"Production model not found: {e}")
-            logger.info("Trying Staging model...")
-            return self.load_staging_model()
-    
-    def load_staging_model(self):
-        """Fallback: Load model from Staging stage"""
-        try:
-            model_uri = f"models:/{MODEL_NAME}/Staging"
-            logger.info(f"Loading staging model: {model_uri}")
-            
-            self.model = mlflow.xgboost.load_model(model_uri)
-            
-            client = mlflow.MlflowClient()
-            model_versions = client.get_latest_versions(MODEL_NAME, stages=["Staging"])
-            
-            if model_versions:
-                self.model_version = model_versions[0].version
-                logger.info(f"✓ Loaded model version {self.model_version} (Staging)")
-            
-            return self.model
-            
-        except Exception as e:
-            logger.error(f"Staging model not found: {e}")
-            logger.info("Trying latest version...")
-            return self.load_latest_model()
-    
-    def load_latest_model(self):
-        """Fallback: Load latest model version"""
-        try:
-            model_uri = f"models:/{MODEL_NAME}/latest"
-            logger.info(f"Loading latest model: {model_uri}")
-            
-            self.model = mlflow.xgboost.load_model(model_uri)
-            logger.info(f"✓ Loaded latest model version")
-            
-            return self.model
-            
-        except Exception as e:
-            logger.error(f"Failed to load any model: {e}")
-            raise
-    
-    def get_model(self):
-        """Get loaded model (loads if not already loaded)"""
-        if self.model is None:
-            self.load_production_model()
-        return self.model
 
-if __name__ == "__main__":
-    loader = ModelLoader()
-    model = loader.get_model()
-    print(f"Model loaded successfully: {type(model)}")
+class ModelLoader:
+    """
+    Load and cache MLflow models per asset
+    """
+
+    def __init__(self):
+        self.models = {}          # cache: model_name -> model
+        self.model_versions = {} # cache: model_name -> version
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+
+    def _load_model(self, model_name: str):
+        """
+        Internal: load model with Production → Staging → Latest fallback
+        """
+        client = mlflow.MlflowClient()
+
+        # 1️⃣ Try Production
+        try:
+            model_uri = f"models:/{model_name}/Production"
+            logger.info(f"Loading Production model: {model_uri}")
+            model = mlflow.xgboost.load_model(model_uri)
+
+            versions = client.get_latest_versions(model_name, stages=["Production"])
+            version = versions[0].version if versions else None
+
+            logger.info(f"✓ Loaded Production model {model_name} (v{version})")
+            return model, version
+        except Exception as e:
+            logger.warning(f"Production model not found for {model_name}: {e}")
+
+        # 2️⃣ Try Staging
+        try:
+            model_uri = f"models:/{model_name}/Staging"
+            logger.info(f"Loading Staging model: {model_uri}")
+            model = mlflow.xgboost.load_model(model_uri)
+
+            versions = client.get_latest_versions(model_name, stages=["Staging"])
+            version = versions[0].version if versions else None
+
+            logger.info(f"✓ Loaded Staging model {model_name} (v{version})")
+            return model, version
+        except Exception as e:
+            logger.warning(f"Staging model not found for {model_name}: {e}")
+
+        # 3️⃣ Fallback: Latest
+        try:
+            model_uri = f"models:/{model_name}/latest"
+            logger.info(f"Loading Latest model: {model_uri}")
+            model = mlflow.xgboost.load_model(model_uri)
+
+            logger.info(f"✓ Loaded Latest model {model_name}")
+            return model, "latest"
+        except Exception as e:
+            logger.error(f"Failed to load model {model_name}: {e}")
+            raise
+
+    def get_model(self, model_name: str):
+        """
+        Get model by name (cached)
+        """
+        if model_name not in self.models:
+            model, version = self._load_model(model_name)
+            self.models[model_name] = model
+            self.model_versions[model_name] = version
+
+        return self.models[model_name]

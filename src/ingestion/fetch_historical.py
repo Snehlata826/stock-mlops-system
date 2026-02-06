@@ -6,7 +6,7 @@ import requests
 import yfinance as yf # type: ignore
 from dotenv import load_dotenv
 
-from src.common.config import RAW_DATA_DIR, DEFAULT_TICKER, HISTORICAL_PERIOD
+from src.common.config import RAW_DATA_DIR, DEFAULT_ASSET, HISTORICAL_PERIOD
 from src.common.utils import logger
 
 
@@ -57,10 +57,11 @@ def fetch_from_alpha_vantage(ticker: str) -> pd.DataFrame:
 
 
 def fetch_historical_data(
-    ticker: str = DEFAULT_TICKER,
+    ticker: str = DEFAULT_ASSET,
     period: str = HISTORICAL_PERIOD,
 ) -> pd.DataFrame:
-    logger.info(f"Fetching historical data for {ticker}")
+    logger.info(f"Fetching historical data for {ticker} (training data)")
+
 
     try:
         df = yf.Ticker(ticker).history(period=period, auto_adjust=True)
@@ -76,7 +77,7 @@ def fetch_historical_data(
         df = fetch_from_alpha_vantage(ticker)
 
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = RAW_DATA_DIR / "historical_prices.csv"
+    output_path = RAW_DATA_DIR / f"historical_{ticker}.csv"
     df.to_csv(output_path, index=False)
 
     logger.success(f"Saved {len(df)} rows → {output_path}")
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ticker", default=DEFAULT_TICKER)
+    parser.add_argument("--ticker", default=DEFAULT_ASSET)
     parser.add_argument("--period", default=HISTORICAL_PERIOD)
 
     args = parser.parse_args()
