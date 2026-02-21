@@ -9,8 +9,7 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(ROOT_DIR))
 
-
-REPORTS_DIR = ROOT_DIR / "reports" 
+REPORTS_DIR = ROOT_DIR / "reports"
 
 # -------------------------------------------------------
 # Backend imports
@@ -38,7 +37,6 @@ st.set_page_config(
     page_title="Stock Prediction System",
     page_icon="📈",
     layout="wide",
-    
 )
 
 # -------------------------------------------------------
@@ -58,20 +56,23 @@ INTERVAL_MAP = {
     "15m": "15min",
     "1h": "60min"
 }
-api_interval = INTERVAL_MAP[interval_label]
+
+# Safe interval mapping
+api_interval = None
+if interval_label in INTERVAL_MAP:
+    api_interval = INTERVAL_MAP[interval_label]
 
 # -------------------------------------------------------
 # Header
 # -------------------------------------------------------
-
 render_header(
-    ticker=ticker,
+    ticker=ticker if ticker else "Not Selected",
     interval=interval_label,
     horizon=horizon_label
 )
 
 # -------------------------------------------------------
-# Instructions (collapsed, clean)
+# Instructions
 # -------------------------------------------------------
 with st.expander("ℹ️ How to use this dashboard", expanded=True):
     st.markdown("""
@@ -81,16 +82,22 @@ with st.expander("ℹ️ How to use this dashboard", expanded=True):
     This system will:
     - Fetch latest market data
     - Engineer technical indicators
-    - Predict **directional market bias**
-    - Enable **model health & drift checks**
+    - Predict directional market bias
+    - Enable model health & drift checks
 
-    ⚠️ Predictions are probabilistic — **not price targets**.
+    ⚠️ Predictions are probabilistic — not price targets.
     """)
 
 # -------------------------------------------------------
 # Run pipeline (ONLY via sidebar button)
 # -------------------------------------------------------
-if run_analysis:
+if run_analysis and ticker and api_interval and horizon_label not in ["Select Horizon"]:
+
+    # Reset previous results before new run
+    st.session_state.price_data = None
+    st.session_state.predictions = None
+    st.session_state.drift = None
+
     with st.spinner("Fetching real-time market data..."):
         st.session_state.price_data = fetch_realtime_data(
             ticker=ticker,
@@ -109,6 +116,9 @@ if run_analysis:
         st.session_state.predictions = predict(ticker=ticker)
 
     st.success("✅ Market analysis complete")
+
+elif run_analysis:
+    st.sidebar.error("⚠️ Please select Asset, Interval, and Horizon before running analysis.")
 
 # -------------------------------------------------------
 # Price Action (Candles)
@@ -151,25 +161,26 @@ if st.session_state.predictions is not None:
     st.markdown("---")
     st.markdown("## 🔮 Model Outlook")
 
-    summary = build_summary(
-        st.session_state.predictions,
-        interval_label,
-        horizon_label
-    )
+    if interval_label in ["5m", "15m", "1h"] and horizon_label not in ["Select Horizon"]:
+        summary = build_summary(
+            st.session_state.predictions,
+            interval_label,
+            horizon_label
+        )
 
-    render_bias_cards(summary)
+        render_bias_cards(summary)
 
-    st.caption(
-        f"Candle interval ({interval_label}) defines data granularity. "
-        f"Forecast horizon ({horizon_label}) aggregates multiple candles "
-        f"to estimate directional bias."
-    )
+        st.caption(
+            f"Candle interval ({interval_label}) defines data granularity. "
+            f"Forecast horizon ({horizon_label}) aggregates multiple candles "
+            f"to estimate directional bias."
+        )
 
-    st.markdown("### 📈 Model Conviction Over Time")
-    render_probability(st.session_state.predictions)
+        st.markdown("### 📈 Model Conviction Over Time")
+        render_probability(st.session_state.predictions)
 
 # -------------------------------------------------------
-# Model Health (ONLY after predictions)
+# Model Health
 # -------------------------------------------------------
 if st.session_state.predictions is not None:
     st.markdown("---")
@@ -181,6 +192,7 @@ if st.session_state.predictions is not None:
 
     if st.session_state.drift is not None:
         render_model_health(st.session_state.drift)
+
 # -------------------------------------------------------
 # Drift Report (HTML – Evidently)
 # -------------------------------------------------------
