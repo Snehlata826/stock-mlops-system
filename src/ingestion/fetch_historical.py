@@ -25,7 +25,7 @@ def fetch_from_alpha_vantage(ticker: str) -> pd.DataFrame:
         "?function=TIME_SERIES_DAILY"
         f"&symbol={ticker}"
         f"&apikey={ALPHA_VANTAGE_API_KEY}"
-        "&outputsize=compact"
+        "&outputsize=full"
     )
 
     data = requests.get(url, timeout=30).json()

@@ -2,6 +2,7 @@ import os
 import time
 from pathlib import Path
 
+from matplotlib import ticker
 import pandas as pd
 import requests
 from dotenv import load_dotenv
@@ -58,7 +59,7 @@ def fetch_realtime_data(
         f"&symbol={ticker}"
         f"&interval={interval}"
         f"&apikey={ALPHA_VANTAGE_API_KEY}"
-        "&outputsize=compact"
+        "&outputsize=full"
     )
 
     data = requests.get(url, timeout=30).json()
@@ -72,7 +73,12 @@ def fetch_realtime_data(
             return pd.read_csv(cache_file)
 
         logger.warning("No cache found. Falling back to historical slice")
-        df = pd.read_csv("data/raw/historical_prices.csv").tail(50)
+        historical_path = RAW_DATA_DIR / f"historical_{ticker}.csv"
+
+    if historical_path.exists():
+        df = pd.read_csv(historical_path).tail(50)
+    else:
+        raise FileNotFoundError(f"No historical data found for {ticker}")
         df.to_csv(cache_file, index=False)
         return df
 
