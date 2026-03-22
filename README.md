@@ -1,55 +1,34 @@
-# 📈 Stock MLOps System - Local-First Stock Prediction Platform
+# 📈 Stock MLOps System v2.0
 
-A complete **production-ready MLOps system** for stock price direction prediction, designed to run entirely on your local machine. Built with industry-standard tools: **XGBoost**, **MLflow**, **Evidently AI**, and **Streamlit**.
+A **production-ready MLOps system** for stock price direction prediction.  
+Built with XGBoost · MLflow · Evidently AI · Streamlit · FastAPI.
 
 ---
 
-## 🎯 Overview
+## 🆕 What's New in v2.0
 
-This system predicts stock movement direction (UP/DOWN) using machine learning and follows MLOps best practices:
-
-- ✅ **End-to-end ML pipeline** (data ingestion → training → inference)
-- ✅ **Experiment tracking** with MLflow
-- ✅ **Model registry** (Staging/Production)
-- ✅ **Data drift monitoring** with Evidently AI
-- ✅ **Real-time predictions** via Streamlit dashboard
-- ✅ **Dockerized inference** service
-- ✅ **Automated retraining** scripts
+| Feature | Status |
+|---|---|
+| Walk-forward validation (no data leakage) | ✅ New |
+| ARIMA & naive baseline comparison | ✅ New |
+| Backtesting with equity curve, Sharpe, drawdown | ✅ New |
+| MAE / RMSE / MAPE on probability outputs | ✅ New |
+| FastAPI REST endpoint `/predict` | ✅ New |
+| 40+ engineered features (was 25) | ✅ New |
+| Full dark-theme UI redesign with tabs | ✅ New |
+| Time-ordered train/test split (no shuffle) | ✅ Fixed |
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Data Ingestion Layer                     │
-│  • Historical data (yfinance) • Real-time data (5-15min)    │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│                  Feature Engineering Layer                   │
-│  • Technical Indicators • Rolling Stats • Volatility         │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│                     Training Layer                           │
-│  • XGBoost Classifier • MLflow Tracking • Model Registry     │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    Inference Layer                           │
-│  • Production Model Loader • Batch Predictions               │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   Monitoring Layer                           │
-│  • Data Drift Detection • Model Performance Tracking         │
-└──────────────────────┬──────────────────────────────────────┘
-                       ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    Application Layer                         │
-│  • Streamlit Dashboard • Docker Container                    │
-└─────────────────────────────────────────────────────────────┘
+Data Ingestion → Feature Engineering → Training → Inference → Monitoring
+     │                  │                │             │            │
+ yfinance           40+ features      XGBoost      MLflow       Evidently
+ Alpha Vantage      SMA/EMA/RSI       Walk-fwd     Registry     Drift KS
+                    MACD/BB/ATR       Backtест     FastAPI      HTML report
+                    Stochastic        Baselines    Streamlit
 ```
 
 ---
@@ -58,53 +37,56 @@ This system predicts stock movement direction (UP/DOWN) using machine learning a
 
 ```
 stock-mlops-system/
-│
-├── README.md                          # This file
-├── requirements.txt                   # Python dependencies
-│
-├── data/                              # Data storage
-│   ├── raw/                          # Raw stock data
-│   │   ├── historical_prices.csv
-│   │   └── realtime_prices.csv
-│   ├── processed/                    # Engineered features
-│   │   ├── features_train.csv
-│   │   └── features_inference.csv
-│   └── drift/                        # Drift monitoring data
-│       └── reference_data.csv
-│
-├── src/                              # Source code
-│   ├── common/                       # Shared utilities
-│   │   ├── config.py                # Configuration
-│   │   └── utils.py                 # Helper functions
-│   │
-│   ├── ingestion/                   # Data fetching
-│   │   ├── fetch_historical.py     # Historical data
-│   │   └── fetch_realtime.py       # Real-time data
-│   │
-│   ├── features/                    # Feature engineering
-│   │   └── feature_engineering.py  # Technical indicators
-│   │
-│   ├── training/                    # Model training
-│   │   ├── train.py                # Training pipeline
-│   │   └── evaluate.py             # Model evaluation
-│   │
-│   ├── monitoring/                  # Monitoring
-│   │   └── drift_monitor.py        # Drift detection
-│   │
-│   └── inference/                   # Prediction
-│       ├── model_loader.py         # Model loading
-│       └── predict.py              # Inference pipeline
-│
-├── streamlit_app/                   # Web dashboard
-│   └── app.py                       # Streamlit UI
-│
-├── docker/                          # Containerization
-│   └── Dockerfile                   # Docker config
-│
-└── scripts/                         # Automation scripts
-    ├── run_training.sh             # Full training pipeline
-    ├── run_streamlit.sh            # Launch dashboard
-    └── retrain_cron.sh             # Scheduled retraining
+├── src/
+│   ├── common/
+│   │   ├── config.py              # All configuration
+│   │   ├── companies.py           # Supported tickers
+│   │   └── utils.py               # Logger, validators
+│   ├── ingestion/
+│   │   ├── fetch_historical.py    # yfinance + Alpha Vantage fallback
+│   │   └── fetch_realtime.py      # Intraday with caching
+│   ├── features/
+│   │   └── feature_engineering.py # 40+ technical indicators
+│   ├── training/
+│   │   ├── train.py               # XGBoost + MLflow (time-ordered split)
+│   │   ├── evaluate.py            # Confusion matrix, ROC, feature importance
+│   │   ├── walk_forward_validation.py  # ★ NEW: No-leakage WF validation
+│   │   ├── baseline_models.py     # ★ NEW: ARIMA + naive baselines
+│   │   └── backtesting.py         # ★ NEW: Strategy simulation
+│   ├── inference/
+│   │   ├── model_loader.py        # Production→Staging→Latest fallback
+│   │   └── predict.py             # Batch prediction pipeline
+│   ├── monitoring/
+│   │   └── drift_monitor.py       # Evidently drift detection
+│   └── api.py                     # ★ NEW: FastAPI REST endpoint
+├── streamlit_app/
+│   ├── app.py                     # Main dashboard (tabbed UI)
+│   └── components/
+│       ├── header.py
+│       ├── sidebar.py
+│       ├── candles.py             # Candlestick + volume chart
+│       ├── bias_cards.py          # Bullish/bearish metric cards
+│       ├── probability_chart.py   # Conviction over time
+│       ├── model_health.py        # Drift health cards
+│       ├── walkforward.py         # ★ NEW: WF results + baseline chart
+│       └── backtest.py            # ★ NEW: Equity curve + metrics
+├── docker/
+│   └── Dockerfile
+├── scripts/
+│   ├── run_training.sh            # Full training pipeline
+│   ├── run_streamlit.sh           # Launch dashboard
+│   ├── run_api.sh                 # Launch FastAPI
+│   └── retrain_cron.sh            # Scheduled retraining
+├── data/
+│   ├── raw/                       # OHLCV CSV files
+│   ├── processed/                 # Engineered features
+│   └── drift/                     # Reference data for monitoring
+├── reports/                       # Evidently HTML drift reports
+├── evaluation/                    # Plots: ROC, confusion matrix, importance
+├── mlruns/                        # MLflow experiment tracking
+├── requirements.txt
+├── .env.example
+└── README.md
 ```
 
 ---
@@ -112,521 +94,276 @@ stock-mlops-system/
 ## 🚀 Quick Start (5 Minutes)
 
 ### Prerequisites
+- Python 3.10 or 3.11
+- Git (optional)
 
-- **Python 3.10 or 3.11** ([Download](https://www.python.org/downloads/))
-- **Git** (optional, for cloning)
-- **Docker** (optional, for containerization)
-
-### Step 1: Setup Environment
+### Step 1 — Setup environment
 
 ```bash
-# Extract the zip file
+# Unzip and enter the project
 unzip stock-mlops-system.zip
 cd stock-mlops-system
 
 # Create virtual environment
 python3.10 -m venv venv
 
-# Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-
-# On Windows:
-venv\Scripts\activate
+# Activate
+source venv/bin/activate        # macOS / Linux
+# venv\Scripts\activate         # Windows
 
 # Install dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
-
-# Download NLTK data (optional, for sentiment features)
-python -c "import nltk; nltk.download('punkt'); nltk.download('vader_lexicon')"
 ```
 
-### Step 2: Start MLflow Server
+### Step 2 — (Optional) Add Alpha Vantage key
 
-**Open Terminal 1** (keep this running):
+```bash
+cp .env.example .env
+# Edit .env and paste your free key from https://www.alphavantage.co
+```
+
+Without a key the system falls back to historical data for inference — fully functional.
+
+### Step 3 — Start MLflow
+
+Open **Terminal 1** and keep it running:
 
 ```bash
 mlflow ui --port 5000
 ```
 
-✅ Access MLflow UI at: **http://localhost:5000**
+✅ MLflow UI → http://localhost:5000
 
-### Step 3: Train the Model
+### Step 4 — Train the model
 
-**Open Terminal 2**:
+Open **Terminal 2**:
 
 ```bash
-# Make scripts executable (Mac/Linux only)
+# macOS / Linux
 chmod +x scripts/*.sh
-
-# Run complete training pipeline
 bash scripts/run_training.sh AAPL 2y
 
-# On Windows (use Git Bash or WSL), or run manually:
-# python -m src.ingestion.fetch_historical --ticker {} --period 2y
-# python -m src.features.feature_engineering --mode train --ticker {}
-# python -m src.training.train --ticker {}
-# python -m src.training.evaluate --ticker {}
+# Windows (Git Bash or WSL)
+bash scripts/run_training.sh AAPL 2y
+
+# Or run steps manually:
+python -m src.ingestion.fetch_historical --ticker AAPL --period 2y
+python -m src.features.feature_engineering --mode train --ticker AAPL
+python -m src.training.train --ticker AAPL
+python -m src.training.evaluate --ticker AAPL
+python -m src.training.walk_forward_validation --ticker AAPL --n_splits 5
+python -m src.training.baseline_models --ticker AAPL
 ```
 
+The training script runs all 6 steps automatically:
+1. Fetch 2 years of OHLCV data
+2. Engineer 40+ technical features
+3. Train XGBoost (time-ordered split)
+4. Evaluate & save plots
+5. Walk-forward validation (5 folds)
+6. ARIMA + naive baselines
 
-This will:
-1. ✅ Fetch 2 years of AAPL historical data
-2. ✅ Engineer technical features
-3. ✅ Train XGBoost model
-4. ✅ Log experiment to MLflow
-5. ✅ Evaluate model performance
+### Step 5 — Promote model to Production
 
-### Step 4: Promote Model to Production
-
-**Option A - Via MLflow UI** (Recommended):
+**Option A — MLflow UI (recommended):**
 1. Open http://localhost:5000
-2. Click "Models" tab
-3. Click "stock_direction_predictor"
-4. Select latest version
-5. Click "Stage" → "Transition to Production"
+2. Click **Models** tab → `stock_direction_predictor_AAPL`
+3. Select latest version → **Stage → Transition to Production**
 
-**Option B - Via Python**:
+**Option B — Python:**
 ```python
 import mlflow
-mlflow.set_tracking_uri("file:///path/to/stock-mlops-system/mlruns")
+mlflow.set_tracking_uri("file:mlruns")
 client = mlflow.MlflowClient()
 client.transition_model_version_stage(
-    name="stock_direction_predictor",
+    name="stock_direction_predictor_AAPL",
     version="1",
     stage="Production"
 )
 ```
 
-### Step 5: Run Streamlit Dashboard
+### Step 6 — Launch the dashboard
 
-**Open Terminal 3**:
+Open **Terminal 3**:
 
 ```bash
 bash scripts/run_streamlit.sh
-
-# Or directly:
-streamlit run streamlit_app/app.py --server.port 8501
 ```
 
-✅ Access Dashboard at: **http://localhost:8501**
+✅ Dashboard → http://localhost:8501
 
----
+### Step 7 — (Optional) Launch the API
 
-## 📊 Using the Dashboard
-
-The Streamlit dashboard provides an interactive interface:
-
-### Features:
-
-1. **📥 Fetch Real-time Data**
-   - Configure ticker symbol (e.g., AAPL, MSFT, GOOGL)
-   - Select time period (1d, 5d, 1mo)
-   - Choose interval (5m, 15m, 1h)
-
-2. **⚙️ Engineer Features**
-   - Automatically creates 30+ technical indicators
-   - Rolling statistics, volatility, momentum
-
-3. **🎯 Make Predictions**
-   - Binary direction (UP/DOWN)
-   - Confidence scores
-   - Probability distributions
-
-4. **📊 Drift Monitoring**
-   - Detect data drift vs training data
-   - HTML reports with detailed analysis
-   - Retraining alerts
-
----
-
-## 🧪 Features & Technical Indicators
-
-The system creates **30+ features** including:
-
-### Price-based Features
-- Simple Moving Averages (SMA 5, 10, 20)
-- Exponential Moving Averages (EMA 5, 10, 20)
-- Price momentum (5-day, 10-day)
-- High-Low spread
-- Log returns
-
-### Technical Indicators
-- **RSI** (Relative Strength Index)
-- **MACD** (Moving Average Convergence Divergence)
-- **Bollinger Bands** (upper, lower, width)
-
-### Volatility Features
-- Rolling standard deviation
-- Historical volatility
-
-### Volume Features
-- Volume SMA
-- Volume ratio
-
----
-
-## 🐳 Docker Deployment
-
-### Build Image
+Open **Terminal 4**:
 
 ```bash
-docker build -t stock-mlops-inference -f docker/Dockerfile .
+bash scripts/run_api.sh
 ```
 
-### Run Container
+✅ API docs → http://localhost:8000/docs
+
+---
+
+## 📊 Dashboard Tabs
+
+| Tab | What it shows |
+|---|---|
+| **Price Action** | Candlestick chart + volume, period summary |
+| **Model Outlook** | Bullish/bearish bias card, confidence, probability chart |
+| **Validation** | Walk-forward results (MAE/RMSE/MAPE), baseline comparison |
+| **Backtest** | Equity curve, Sharpe ratio, max drawdown, win rate |
+| **Health** | Data drift detection, Evidently HTML report |
+
+---
+
+## 🌐 FastAPI Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/` | Health check + supported assets |
+| GET | `/health` | Simple ping |
+| POST | `/predict` | Get predictions for a ticker |
+| GET | `/assets` | List supported tickers |
+| GET | `/model/{ticker}/info` | Model version + feature count |
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"ticker": "AAPL", "top_n": 5}'
+```
+
+---
+
+## 🐳 Docker
 
 ```bash
+# Build
+docker build -t stock-mlops -f docker/Dockerfile .
+
+# Run (mounts mlruns and data for persistence)
 docker run -p 8501:8501 \
   -v $(pwd)/mlruns:/app/mlruns \
   -v $(pwd)/data:/app/data \
-  stock-mlops-inference
-```
-
-✅ Access at: **http://localhost:8501**
-
-### Docker Compose (Optional)
-
-Create `docker-compose.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  streamlit:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    ports:
-      - "8501:8501"
-    volumes:
-      - ./mlruns:/app/mlruns
-      - ./data:/app/data
-    environment:
-      - PYTHONUNBUFFERED=1
-```
-
-Run with:
-```bash
-docker-compose up
+  stock-mlops
 ```
 
 ---
 
-## 🔄 Automated Retraining
+## 📐 Walk-Forward Validation
 
-### Manual Retraining
+Unlike random `train_test_split`, walk-forward validation:
+- Trains only on past data
+- Tests on future data
+- Repeats across multiple folds
+- Gives honest out-of-sample performance
 
-```bash
-bash scripts/run_training.sh AAPL 2y
+```
+Fold 1:  [====train====] [test]
+Fold 2:  [=====train=====] [test]
+Fold 3:  [======train======] [test]
 ```
 
-### Scheduled Retraining (Cron)
+Run independently:
+```bash
+python -m src.training.walk_forward_validation --ticker AAPL --n_splits 5
+```
+
+---
+
+## 💹 Backtesting
+
+Three strategies are available:
+
+| Strategy | Description |
+|---|---|
+| Long Only | Buy when model predicts UP, hold cash otherwise |
+| Long / Short | Buy when UP, short when DOWN |
+| Buy & Hold | Always long — used as the baseline |
+
+Metrics reported: total return, alpha vs B&H, Sharpe ratio, max drawdown, win rate, number of trades.
 
 ```bash
-# Edit crontab
+python -m src.training.backtesting --ticker AAPL --strategy long_only
+```
+
+---
+
+## 📈 Expected Performance
+
+| Metric | Typical Range |
+|---|---|
+| Accuracy (walk-forward) | 52%–58% |
+| ROC-AUC | 0.54–0.64 |
+| Sharpe Ratio (long only) | 0.2–0.8 |
+| ARIMA baseline accuracy | 49%–53% |
+
+Stock prediction is inherently hard. The goal is a consistent edge over 50% and over statistical baselines.
+
+---
+
+## 🔄 Retraining
+
+**Manual:**
+```bash
+bash scripts/run_training.sh TSLA 2y
+```
+
+**Scheduled (cron):**
+```bash
 crontab -e
-
-# Add line (runs every Sunday at 2 AM):
-0 2 * * 0 /absolute/path/to/stock-mlops-system/scripts/retrain_cron.sh
-
-# Or weekly on Monday at 3 AM:
-0 3 * * 1 /absolute/path/to/stock-mlops-system/scripts/retrain_cron.sh
-```
-
-### Logs
-
-Retraining logs are saved in `logs/retrain_YYYYMMDD_HHMMSS.log`
-
----
-
-## 📈 Model Performance
-
-Expected performance metrics:
-
-| Metric      | Typical Range |
-|-------------|---------------|
-| Accuracy    | 52% - 58%     |
-| Precision   | 50% - 60%     |
-| Recall      | 50% - 60%     |
-| F1 Score    | 50% - 58%     |
-| ROC-AUC     | 55% - 65%     |
-
-**Note**: Stock prediction is inherently difficult. The goal is to beat random guessing (50%) consistently.
-
----
-
-## 🔧 Advanced Usage
-
-### Custom Stock Ticker
-
-```bash
-# Fetch different stock
-python src/ingestion/fetch_historical.py --ticker TSLA --period 1y
-
-# Retrain with new ticker
-bash scripts/run_training.sh TSLA 1y
-```
-
-### Manual Pipeline Execution
-
-```bash
-# 1. Fetch historical data
-python src/ingestion/fetch_historical.py --ticker AAPL --period 2y
-
-# 2. Engineer features for training
-python src/features/feature_engineering.py --mode train
-
-# 3. Train model
-python src/training/train.py
-
-# 4. Evaluate model
-python src/training/evaluate.py
-
-# 5. Fetch real-time data
-python src/ingestion/fetch_realtime.py --ticker AAPL --period 5d --interval 5m
-
-# 6. Engineer features for inference
-python src/features/feature_engineering.py --mode inference
-
-# 7. Make predictions
-python src/inference/predict.py
-
-# 8. Check drift
-python src/monitoring/drift_monitor.py
-```
-
-### MLflow Model Registry API
-
-```python
-import mlflow
-from mlflow.tracking import MlflowClient
-
-mlflow.set_tracking_uri("file:///path/to/mlruns")
-client = MlflowClient()
-
-# List all models
-models = client.search_registered_models()
-for model in models:
-    print(f"Model: {model.name}")
-
-# Get model versions
-versions = client.search_model_versions("name='stock_direction_predictor'")
-for v in versions:
-    print(f"Version {v.version}: Stage={v.current_stage}")
-
-# Promote to Production
-client.transition_model_version_stage(
-    name="stock_direction_predictor",
-    version="1",
-    stage="Production"
-)
-
-# Archive old versions
-client.transition_model_version_stage(
-    name="stock_direction_predictor",
-    version="1",
-    stage="Archived"
-)
+# Add: 0 2 * * 0 /absolute/path/to/scripts/retrain_cron.sh
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Issue: `ModuleNotFoundError: No module named 'src'`
-
-**Solution**:
+**`ModuleNotFoundError: No module named 'src'`**
 ```bash
-# Ensure you're in the project root
-cd stock-mlops-system
-
-# Add to PYTHONPATH (Mac/Linux)
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-
-# Or run scripts from project root
-python -m src.training.train
+export PYTHONPATH="$(pwd)"   # macOS/Linux
+set PYTHONPATH=%cd%          # Windows CMD
 ```
 
-### Issue: `Model not found in registry`
+**`Model not found in registry`**
+- Check MLflow UI at http://localhost:5000
+- Ensure training ran: `bash scripts/run_training.sh AAPL`
+- Promote the model to Production in MLflow UI
 
-**Solution**:
-1. Check MLflow UI (http://localhost:5000)
-2. Ensure model is trained: `python src/training/train.py`
-3. Promote model to Production in MLflow UI
-4. Model loader has fallback: Staging → Latest
+**`No inference features for AAPL`**
+- Click **Run Market Analysis** in the dashboard first
+- Or run: `python -m src.ingestion.fetch_realtime --ticker AAPL`
 
-### Issue: `No data retrieved for ticker`
+**`ARIMA baseline is slow`**
+- ARIMA runs rolling one-step forecasts — this is intentional for correctness
+- Reduce the test window or run in the background
 
-**Solution**:
-- Check internet connection
-- Verify ticker symbol is valid
-- Try different period: `--period 1y` instead of `2y`
-- Check yfinance status:
-  ```python
-  import yfinance as yf
-  ticker = yf.Ticker('AAPL')
-  print(ticker.info)
-  ```
-
-### Issue: Permission denied on scripts (Mac/Linux)
-
-**Solution**:
+**Port already in use**
 ```bash
-chmod +x scripts/*.sh
-```
-
-### Issue: MLflow UI not starting
-
-**Solution**:
-```bash
-# Check if port 5000 is in use
-lsof -i :5000  # Mac/Linux
-netstat -ano | findstr :5000  # Windows
-
-# Use different port
-mlflow ui --port 5001
-```
-
-### Issue: Streamlit crashes
-
-**Solution**:
-```bash
-# Clear cache
-streamlit cache clear
-
-# Check port availability
-lsof -i :8501  # Mac/Linux
-
-# Use different port
-streamlit run streamlit_app/app.py --server.port 8502
-```
-
-### Issue: Docker build fails
-
-**Solution**:
-```bash
-# Ensure Docker is running
-docker --version
-
-# Clean build
-docker system prune -a
-docker build --no-cache -t stock-mlops-inference -f docker/Dockerfile .
+lsof -i :8501   # macOS/Linux — find PID then kill
+kill -9 <PID>
 ```
 
 ---
 
-## 📚 Technology Stack
+## 🛠️ Tech Stack
 
-| Component           | Technology      | Purpose                    |
-|---------------------|-----------------|----------------------------|
-| ML Framework        | XGBoost         | Binary classification      |
-| Experiment Tracking | MLflow          | Model versioning & registry|
-| Data Fetching       | yfinance        | Stock market data          |
-| Drift Detection     | Evidently AI    | Data quality monitoring    |
-| Web Dashboard       | Streamlit       | Interactive UI             |
-| Visualization       | Plotly          | Interactive charts         |
-| Logging             | Loguru          | Structured logging         |
-| Data Processing     | Pandas          | Data manipulation          |
-| Containerization    | Docker          | Deployment                 |
-
----
-
-## 🎓 Learning Resources
-
-### MLOps Concepts
-- [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
-- [Evidently AI Docs](https://docs.evidentlyai.com/)
-- [XGBoost Guide](https://xgboost.readthedocs.io/)
-
-### Stock Market Features
-- [Technical Analysis Indicators](https://www.investopedia.com/terms/t/technicalindicator.asp)
-- [Bollinger Bands](https://www.investopedia.com/terms/b/bollingerbands.asp)
-- [RSI (Relative Strength Index)](https://www.investopedia.com/terms/r/rsi.asp)
-
-### Best Practices
-- [Google MLOps Guide](https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning)
-- [ML Model Registry Patterns](https://neptune.ai/blog/ml-model-registry)
-
----
-
-## 🔐 Security & Privacy
-
-- ✅ **No API keys required** - uses free yfinance data
-- ✅ **Local-first** - all data stays on your machine
-- ✅ **No cloud dependencies** - fully offline capable
-- ✅ **Open source libraries** - transparent and auditable
-
----
-
-## 🗺️ Roadmap
-
-### Planned Features
-- [ ] Multi-stock portfolio predictions
-- [ ] Sentiment analysis from news headlines
-- [ ] LSTM/Transformer model options
-- [ ] FastAPI REST API endpoint
-- [ ] PostgreSQL database integration
-- [ ] Kubernetes deployment manifests
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Model explainability (SHAP values)
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Areas for improvement:
-
-1. **Feature Engineering**: Add more technical indicators
-2. **Model Architectures**: Try LSTM, Transformers, Ensemble methods
-3. **Data Sources**: Integrate news sentiment, economic indicators
-4. **Monitoring**: Enhanced alerting, Slack/email notifications
-5. **Testing**: Unit tests, integration tests
-6. **Documentation**: Jupyter notebooks, tutorials
-
----
-
-## 📄 License
-
-MIT License - free for personal and commercial use.
+| Component | Technology |
+|---|---|
+| ML model | XGBoost |
+| Experiment tracking | MLflow |
+| Data drift | Evidently AI |
+| Dashboard | Streamlit |
+| REST API | FastAPI + Uvicorn |
+| Data source | yfinance + Alpha Vantage |
+| Statistical baselines | statsmodels (ARIMA) |
+| Visualization | Plotly |
+| Logging | Loguru |
+| Containerization | Docker |
 
 ---
 
 ## ⚠️ Disclaimer
 
-**This system is for educational purposes only.**
-
-- Not financial advice
-- Past performance ≠ future results
-- Stock market prediction is inherently uncertain
-- Use at your own risk
-- Consult a licensed financial advisor for investment decisions
-
----
-
-## 📞 Support
-
-For issues or questions:
-
-1. Check **Troubleshooting** section above
-2. Review MLflow UI logs
-3. Check `logs/` directory for error details
-4. Verify all dependencies are installed
-
----
-
-## 🎉 Acknowledgments
-
-Built with:
-- [XGBoost](https://github.com/dmlc/xgboost)
-- [MLflow](https://github.com/mlflow/mlflow)
-- [Evidently AI](https://github.com/evidentlyai/evidently)
-- [Streamlit](https://github.com/streamlit/streamlit)
-- [yfinance](https://github.com/ranaroussi/yfinance)
-
----
-
-**Happy Predicting! 📈**
-
-*Built with ❤️ for the MLOps community*
+**Educational purposes only.** Not financial advice. Past performance does not guarantee future results. Consult a licensed financial advisor before making investment decisions.

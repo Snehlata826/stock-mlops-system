@@ -1,55 +1,54 @@
 import streamlit as st
 from src.common.companies import COMPANIES
 
+
 def render_sidebar():
-    st.sidebar.header("📊 Market Configuration")
+    st.sidebar.markdown("""
+    <style>
+    section[data-testid="stSidebar"] {
+        background: #0d1117;
+        border-right: 1px solid rgba(255,255,255,0.07);
+    }
+    .sidebar-section {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 10px;
+        padding: 14px;
+        margin-bottom: 14px;
+    }
+    .sidebar-label {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        color: rgba(255,255,255,0.35);
+        text-transform: uppercase;
+        margin-bottom: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Asset selection (Default: Not Selected)
-    asset_options = ["Select Asset"] + list(COMPANIES.keys())
-    asset = st.sidebar.selectbox(
-        "Asset",
-        asset_options,
-        index=0
-    )
+    st.sidebar.markdown("## ⚙️ Configuration")
 
-    ticker = None
-    if asset != "Select Asset":
-        ticker = COMPANIES[asset]
+    st.sidebar.markdown('<div class="sidebar-label">Asset</div>', unsafe_allow_html=True)
+    asset = st.sidebar.selectbox("Asset", list(COMPANIES.keys()), label_visibility="collapsed")
+    ticker = COMPANIES[asset]
 
-    # Candle interval (Default: Not Selected)
-    interval_options = ["Select Interval", "5m", "15m", "1h"]
-    interval = st.sidebar.selectbox(
-        "Candle Interval",
-        interval_options,
-        index=0
-    )
+    st.sidebar.markdown('<div class="sidebar-label">Candle Interval</div>', unsafe_allow_html=True)
+    interval = st.sidebar.selectbox("Interval", ["5m", "15m", "1h"], label_visibility="collapsed")
 
-    # Forecast horizon (Default: Not Selected)
-    horizon_options = ["Select Horizon", "Next Interval", "1 Day", "1 Month", "3 Months"]
+    st.sidebar.markdown('<div class="sidebar-label">Forecast Horizon</div>', unsafe_allow_html=True)
     horizon = st.sidebar.selectbox(
-        "Forecast Horizon",
-        horizon_options,
-        index=0
+        "Horizon",
+        ["Next Interval", "1 Day", "1 Month", "3 Months"],
+        label_visibility="collapsed"
     )
 
-    # Divider
     st.sidebar.markdown("---")
 
-    # Run analysis button
-    run_analysis = st.sidebar.button(
-        "🚀 Run Market Analysis",
-        use_container_width=True
-    )
+    run_analysis = st.sidebar.button("🚀 Run Market Analysis", use_container_width=True, type="primary")
 
-    # Footer info
-    if ticker:
-        st.sidebar.caption(f"Ticker: **{ticker}**")
-    st.sidebar.caption("Predictions are probabilistic, not financial advice.")
-
-    # Validation check
-    if run_analysis:
-        if asset == "Select Asset" or interval == "Select Interval" or horizon == "Select Horizon":
-            st.sidebar.error("⚠️ Please select all options before running analysis.")
-            run_analysis = False
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"**Ticker:** `{ticker}`")
+    st.sidebar.caption("Predictions are probabilistic — not financial advice.")
 
     return ticker, interval, horizon, run_analysis
