@@ -46,10 +46,10 @@ def render_probability(predictions):
         ),
     )
 
-st.plotly_chart(fig, use_container_width=True, config={
+    st.plotly_chart(fig, use_container_width=True, config={
     "displayModeBar": True,
     "displaylogo": False,
     "modeBarButtonsToRemove": ["select2d", "lasso2d"],
     "scrollZoom": True,
-})
+    })
    
