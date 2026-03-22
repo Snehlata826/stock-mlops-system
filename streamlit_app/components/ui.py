@@ -36,7 +36,6 @@ def info_panel(content: str):
 
 
 def empty_state(icon: str, message: str, hint: str = ""):
-    """Render an empty state placeholder."""
     hint_html = f'<div class="hint">{hint}</div>' if hint else ""
     st.markdown(f"""
     <div class="empty-state">
@@ -44,8 +43,20 @@ def empty_state(icon: str, message: str, hint: str = ""):
         <div class="msg">{message}</div>
         {hint_html}
     </div>
+    <style>
+    .empty-state .msg {{
+        color: #8896b3 !important;
+        font-size: 13px !important;
+    }}
+    .empty-state .hint {{
+        color: #6b7a99 !important;
+        font-size: 12px !important;
+    }}
+    .empty-state .icon {{
+        opacity: 0.7 !important;
+    }}
+    </style>
     """, unsafe_allow_html=True)
-
 
 def metric_row(metrics: list):
     """
