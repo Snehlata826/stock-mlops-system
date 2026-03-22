@@ -238,16 +238,28 @@ def run_backtest_endpoint(ticker: str, strategy: str = "long_only"):
     if ticker not in SUPPORTED_ASSETS:
         raise HTTPException(status_code=400, detail=f"Unsupported ticker '{ticker}'")
     try:
+        import math
         from src.training.backtesting import run_backtest
         result = run_backtest(ticker, strategy=strategy)
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
-        metrics   = result["metrics"]
+
+        def clean(obj):
+            if isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return 0.0
+                return obj
+            if isinstance(obj, dict):
+                return {k: clean(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [clean(v) for v in obj]
+            return obj
+
         trade_log = result["trade_log"]
-        return {
+        return clean({
             "ticker":   ticker,
             "strategy": strategy,
-            "metrics":  metrics,
+            "metrics":  result["metrics"],
             "trade_log": {
                 "date":            trade_log["date"].astype(str).tolist(),
                 "signal":          trade_log["signal"].tolist(),
@@ -257,13 +269,13 @@ def run_backtest_endpoint(ticker: str, strategy: str = "long_only"):
                 "cum_strategy":    trade_log["cum_strategy"].tolist(),
                 "cum_bah":         trade_log["cum_bah"].tolist(),
             }
-        }
+        })
     except HTTPException:
         raise
     except Exception as exc:
         logger.error(f"Backtest failed: {exc}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(exc))
-
+       
 # ── Walk-forward validation ───────────────────────────────────
 @app.post("/assets/{ticker}/walkforward")
 def run_walkforward_endpoint(ticker: str, n_splits: int = 5):
@@ -271,37 +283,34 @@ def run_walkforward_endpoint(ticker: str, n_splits: int = 5):
     if ticker not in SUPPORTED_ASSETS:
         raise HTTPException(status_code=400, detail=f"Unsupported ticker '{ticker}'")
     try:
+        import math
+        import json
         from src.training.walk_forward_validation import run_walk_forward_validation
         result = run_walk_forward_validation(ticker, n_splits=n_splits)
-        return {
+
+        def clean(obj):
+            if isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return 0.0
+                return obj
+            if isinstance(obj, dict):
+                return {k: clean(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [clean(v) for v in obj]
+            return obj
+
+        return clean({
             "ticker":    ticker,
             "n_splits":  n_splits,
             "folds":     result["folds"],
             "aggregate": result["aggregate"],
-        }
+        })
     except HTTPException:
         raise
     except Exception as exc:
         logger.error(f"Walk-forward failed: {exc}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(exc))
-
-# ── Drift monitoring ──────────────────────────────────────────
-@app.get("/assets/{ticker}/drift")
-def run_drift_endpoint(ticker: str):
-    ticker = ticker.upper()
-    if ticker not in SUPPORTED_ASSETS:
-        raise HTTPException(status_code=400, detail=f"Unsupported ticker '{ticker}'")
-    try:
-        from src.monitoring.drift_monitor import monitor_drift
-        result = monitor_drift(ticker=ticker)
-        result.pop("report_path", None)
-        return result
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error(f"Drift failed: {exc}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(exc))
-
+        
 # ── Baselines (ARIMA + Naive) ─────────────────────────────────
 @app.post("/assets/{ticker}/baselines")
 def run_baselines_endpoint(ticker: str):
@@ -320,4 +329,34 @@ def run_baselines_endpoint(ticker: str):
         raise
     except Exception as exc:
         logger.error(f"Baselines failed: {exc}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(exc))
+    
+    
+@app.get("/assets/{ticker}/drift")
+def run_drift_endpoint(ticker: str):
+    ticker = ticker.upper()
+    if ticker not in SUPPORTED_ASSETS:
+        raise HTTPException(status_code=400, detail=f"Unsupported ticker '{ticker}'")
+    try:
+        import math
+        from src.monitoring.drift_monitor import monitor_drift
+        result = monitor_drift(ticker=ticker)
+        result.pop("report_path", None)
+
+        def clean(obj):
+            if isinstance(obj, float):
+                if math.isnan(obj) or math.isinf(obj):
+                    return 0.0
+                return obj
+            if isinstance(obj, dict):
+                return {k: clean(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [clean(v) for v in obj]
+            return obj
+
+        return clean(result)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Drift failed: {exc}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(exc))
