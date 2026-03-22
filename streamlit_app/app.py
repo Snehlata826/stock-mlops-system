@@ -348,7 +348,7 @@ with tab_health:
                 try:
                     result = get_client().run_drift(ticker)
                     st.session_state.drift = result
-                    st.success("✅ Drift analysis complete.")
+                
                 except APIError as exc:
                     st.error(f"Drift monitor failed: {exc.detail}")
                 except Exception as exc:
