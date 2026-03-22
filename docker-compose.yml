@@ -1,0 +1,57 @@
+﻿networks:
+  mlops-net:
+    driver: bridge
+
+volumes:
+  mlruns-data:
+  raw-data:
+  processed-data:
+  drift-data:
+  reports-data:
+
+services:
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.8.1
+    container_name: mlops-mlflow
+    networks: [mlops-net]
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlruns-data:/mlruns
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri file:/mlruns
+        --default-artifact-root file:/mlruns
+        --serve-artifacts
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: stock-mlops-backend:latest
+    container_name: mlops-backend
+    networks: [mlops-net]
+    ports:
+      - "8000:8000"
+    volumes:
+      - mlruns-data:/app/mlruns
+      - raw-data:/app/data/raw
+      - processed-data:/app/data/processed
+      - drift-data:/app/data/drift
+      - reports-data:/app/reports
+    env_file: .env
+    environment:
+      PYTHONPATH: "/app"
+      MLFLOW_TRACKING_URI: "file:/app/mlruns"
+      CORS_ORIGINS: "http://localhost:8501,http://frontend:8501"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
