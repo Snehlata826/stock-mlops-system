@@ -77,6 +77,14 @@ class APIClient:
     def predict(self, ticker: str, top_n: int = 500) -> dict:
         return self._post("/predict", {"ticker": ticker, "top_n": top_n})
 
+    def get_price_data(self, ticker: str, interval: str = "15min") -> dict:
+        """Fetch OHLCV price data for candlestick chart."""
+        return self._get(f"/assets/{ticker.upper()}/price?interval={interval}")
+
+    def run_pipeline(self, ticker: str) -> dict:
+        """Trigger data fetch + feature engineering on backend."""
+        return self._post(f"/assets/{ticker.upper()}/run_pipeline", {})
+    
     def asset_status(self, ticker: str) -> dict:
         return self._get(f"/assets/{ticker.upper()}/status")
 
