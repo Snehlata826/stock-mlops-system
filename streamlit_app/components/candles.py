@@ -54,4 +54,17 @@ def render_candles(df, ticker):
         ),
         margin=dict(l=10, r=10, t=40, b=10),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={
+    "displayModeBar": True,
+    "displaylogo": False,
+    "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+    "modeBarButtonsToAdd": ["drawline", "drawopenpath", "eraseshape"],
+    "scrollZoom": True,
+    "toImageButtonOptions": {
+        "format": "png",
+        "filename": f"{ticker}_chart",
+        "height": 600,
+        "width": 1200,
+        "scale": 2
+    }
+})
