@@ -1,5 +1,10 @@
+"""
+Backtest results: metrics + equity curve.
+"""
 import streamlit as st
 import plotly.graph_objects as go
+from components.theme import apply_chart_theme
+from components.ui import metric_row
 
 
 def render_backtest(result: dict):
@@ -7,102 +12,91 @@ def render_backtest(result: dict):
         st.error(f"Backtest failed: {result['error']}")
         return
 
-    m = result["metrics"]
+    m  = result["metrics"]
     tl = result["trade_log"]
 
-    alpha_color = "#68d391" if m["alpha"] >= 0 else "#fc8181"
-    strat_color = "#68d391" if m["total_return_strategy"] >= 0 else "#fc8181"
+    is_alpha_pos  = m["alpha"] >= 0
+    is_strat_pos  = m["total_return_strategy"] >= 0
+    alpha_variant = "bull" if is_alpha_pos else "bear"
+    strat_variant = "bull" if is_strat_pos else "bear"
 
-    st.markdown(f"""
-    <style>
-    .bt-grid {{
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-        margin-bottom: 18px;
-    }}
-    .bt-card {{
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 12px;
-        padding: 14px 16px;
-    }}
-    .bt-label {{
-        font-size: 0.65rem;
-        font-weight: 700;
-        letter-spacing: 1.2px;
-        text-transform: uppercase;
-        color: rgba(255,255,255,0.35);
-        margin-bottom: 6px;
-    }}
-    .bt-value {{
-        font-size: 1.3rem;
-        font-weight: 800;
-        color: #e2e8f0;
-    }}
-    .bt-sub {{
-        font-size: 0.72rem;
-        color: rgba(255,255,255,0.35);
-        margin-top: 3px;
-    }}
-    </style>
-    <div class="bt-grid">
-        <div class="bt-card">
-            <div class="bt-label">Strategy Return</div>
-            <div class="bt-value" style="color:{strat_color}">{m['total_return_strategy']:.1%}</div>
-            <div class="bt-sub">vs B&H: {m['total_return_bah']:.1%}</div>
-        </div>
-        <div class="bt-card">
-            <div class="bt-label">Alpha vs B&H</div>
-            <div class="bt-value" style="color:{alpha_color}">{m['alpha']:+.1%}</div>
-            <div class="bt-sub">Outperformance</div>
-        </div>
-        <div class="bt-card">
-            <div class="bt-label">Sharpe Ratio</div>
-            <div class="bt-value">{m['sharpe_strategy']:.2f}</div>
-            <div class="bt-sub">B&H: {m['sharpe_bah']:.2f}</div>
-        </div>
-        <div class="bt-card">
-            <div class="bt-label">Max Drawdown</div>
-            <div class="bt-value" style="color:#fc8181">{m['max_drawdown_strategy']:.1%}</div>
-            <div class="bt-sub">B&H: {m['max_drawdown_bah']:.1%}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Top metric row
+    metric_row([
+        {
+            "label":   "Strategy Return",
+            "value":   f"{m['total_return_strategy']:+.1%}",
+            "sub":     f"vs B&H: {m['total_return_bah']:+.1%}",
+            "variant": strat_variant,
+        },
+        {
+            "label":   "Alpha vs B&H",
+            "value":   f"{m['alpha']:+.1%}",
+            "sub":     "Outperformance",
+            "variant": alpha_variant,
+        },
+        {
+            "label": "Sharpe Ratio",
+            "value": f"{m['sharpe_strategy']:.2f}",
+            "sub":   f"B&H: {m['sharpe_bah']:.2f}",
+        },
+        {
+            "label":   "Max Drawdown",
+            "value":   f"{m['max_drawdown_strategy']:.1%}",
+            "sub":     f"B&H: {m['max_drawdown_bah']:.1%}",
+            "variant": "bear",
+        },
+    ])
 
-    col1, col2 = st.columns(2)
+    # Secondary row
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Win Rate", f"{m['win_rate']:.1%}")
+        st.metric("Win Rate",    f"{m['win_rate']:.1%}")
     with col2:
-        st.metric("Trades", str(m["n_trades"]))
+        st.metric("Total Trades", str(m["n_trades"]))
+    with col3:
+        st.metric("Test Days",   str(m["n_days"]))
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
     # Equity curve
     fig = go.Figure()
+
     fig.add_trace(go.Scatter(
         x=tl["date"].astype(str),
         y=tl["cum_strategy"],
         name=m["strategy"],
-        line=dict(color="#68d391", width=2),
+        line=dict(color="#00e5a0", width=2.5),
+        fill="tozeroy",
+        fillcolor="rgba(0,229,160,0.04)",
+        hovertemplate="%{y:.3f}×<extra>Strategy</extra>",
     ))
+
     fig.add_trace(go.Scatter(
         x=tl["date"].astype(str),
         y=tl["cum_bah"],
         name="Buy & Hold",
-        line=dict(color="#63b3ed", width=1.5, dash="dot"),
+        line=dict(color="#00d4ff", width=1.5, dash="dot"),
+        hovertemplate="%{y:.3f}×<extra>Buy & Hold</extra>",
     ))
+
+    # Drawdown fill
+    fig.add_trace(go.Scatter(
+        x=tl["date"].astype(str),
+        y=tl["cum_strategy"],
+        fill="tozeroy",
+        fillcolor="rgba(255,77,109,0.03)",
+        line=dict(color="rgba(0,0,0,0)", width=0),
+        showlegend=False,
+        hoverinfo="skip",
+    ))
+
+    apply_chart_theme(fig, height=320, title="Equity Curve — Out-of-Sample Backtest")
     fig.update_layout(
-        title=dict(text="Equity curve (backtest period)", font=dict(size=14, color="#e2e8f0")),
-        height=320,
-        plot_bgcolor="#0d1117",
-        paper_bgcolor="#0d1117",
-        font=dict(color="#a0aec0"),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
-        yaxis=dict(gridcolor="rgba(255,255,255,0.05)", title="Cumulative return (×)"),
-        legend=dict(bgcolor="rgba(0,0,0,0.3)", bordercolor="rgba(255,255,255,0.1)", borderwidth=1),
-        margin=dict(l=10, r=10, t=40, b=10),
+        yaxis=dict(title="Cumulative Return (×)", tickformat=".2f"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
     st.caption(
-        "⚠️ Backtest uses the held-out 20% of training data — never seen during model fitting. "
+        "⚠  Backtest is run on the held-out 20% of training data — never seen during model fitting. "
         "Past performance does not guarantee future results."
     )

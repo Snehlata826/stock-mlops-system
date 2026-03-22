@@ -1,155 +1,120 @@
+"""
+Walk-forward validation results: metrics cards + fold chart + baseline comparison.
+"""
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
+from components.theme import apply_chart_theme
+from components.ui import metric_row, section_header
 
 
 def render_walkforward_results(results: dict):
-    agg = results["aggregate"]
+    agg   = results["aggregate"]
     folds = results["folds"]
 
-    st.markdown(f"""
-    <style>
-    .wf-grid {{
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 12px;
-        margin-bottom: 18px;
-    }}
-    .wf-card {{
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 12px;
-        padding: 14px 18px;
-    }}
-    .wf-label {{
-        font-size: 0.66rem;
-        font-weight: 700;
-        letter-spacing: 1.2px;
-        text-transform: uppercase;
-        color: rgba(255,255,255,0.35);
-        margin-bottom: 6px;
-    }}
-    .wf-value {{
-        font-size: 1.4rem;
-        font-weight: 800;
-        color: #63b3ed;
-    }}
-    .wf-std {{
-        font-size: 0.75rem;
-        color: rgba(255,255,255,0.35);
-        margin-top: 2px;
-    }}
-    </style>
-    <div class="wf-grid">
-        <div class="wf-card">
-            <div class="wf-label">Accuracy (WF)</div>
-            <div class="wf-value">{agg['accuracy_mean']:.1%}</div>
-            <div class="wf-std">± {agg['accuracy_std']:.1%} across {agg['n_folds']} folds</div>
-        </div>
-        <div class="wf-card">
-            <div class="wf-label">ROC-AUC (WF)</div>
-            <div class="wf-value">{agg['roc_auc_mean']:.3f}</div>
-            <div class="wf-std">± {agg['roc_auc_std']:.3f}</div>
-        </div>
-        <div class="wf-card">
-            <div class="wf-label">F1 Score (WF)</div>
-            <div class="wf-value">{agg['f1_mean']:.3f}</div>
-            <div class="wf-std">± {agg['f1_std']:.3f}</div>
-        </div>
-        <div class="wf-card">
-            <div class="wf-label">MAE (prob)</div>
-            <div class="wf-value">{agg['mae_mean']:.4f}</div>
-            <div class="wf-std">Mean absolute error on probabilities</div>
-        </div>
-        <div class="wf-card">
-            <div class="wf-label">RMSE (prob)</div>
-            <div class="wf-value">{agg['rmse_mean']:.4f}</div>
-            <div class="wf-std">Root mean squared error</div>
-        </div>
-        <div class="wf-card">
-            <div class="wf-label">MAPE</div>
-            <div class="wf-value">{agg['mape_mean']:.1f}%</div>
-            <div class="wf-std">Mean absolute pct error</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Aggregate metric cards — 3 + 2 layout
+    metric_row([
+        {"label": "Accuracy (WF)",  "value": f"{agg['accuracy_mean']:.1%}",
+         "sub": f"±{agg['accuracy_std']:.1%} · {agg['n_folds']} folds", "variant": "accent"},
+        {"label": "ROC-AUC",        "value": f"{agg['roc_auc_mean']:.3f}",
+         "sub": f"±{agg['roc_auc_std']:.3f}"},
+        {"label": "F1 Score",       "value": f"{agg['f1_mean']:.3f}",
+         "sub": f"±{agg['f1_std']:.3f}"},
+    ])
+    metric_row([
+        {"label": "MAE (prob)",     "value": f"{agg['mae_mean']:.4f}",
+         "sub": "Mean absolute error on probabilities"},
+        {"label": "RMSE (prob)",    "value": f"{agg['rmse_mean']:.4f}",
+         "sub": "Root mean squared error"},
+        {"label": "Overall AUC",    "value": f"{agg['overall_roc_auc']:.3f}",
+         "sub": "Across all folds combined"},
+    ])
 
-    # Fold-level accuracy chart
-    fold_df = pd.DataFrame(folds)
+    # Per-fold accuracy chart
     fig = go.Figure()
+    fold_nums  = [f"Fold {f['fold']}" for f in folds]
+    accuracies = [f["accuracy"]       for f in folds]
+    roc_aucs   = [f["roc_auc"]        for f in folds]
+
     fig.add_trace(go.Bar(
-        x=[f"Fold {f['fold']}" for f in folds],
-        y=[f["accuracy"] for f in folds],
-        marker_color="#63b3ed",
+        x=fold_nums, y=accuracies,
         name="Accuracy",
+        marker=dict(
+            color=accuracies,
+            colorscale=[[0, "#3d4d6b"], [0.5, "#00d4ff"], [1, "#00e5a0"]],
+            cmin=0.4, cmax=0.75,
+        ),
+        hovertemplate="%{y:.1%}<extra>Accuracy</extra>",
     ))
-    fig.add_hline(y=0.5, line_dash="dot", line_color="rgba(255,255,255,0.3)",
-                  annotation_text="Random baseline")
-    fig.add_hline(y=agg["accuracy_mean"], line_dash="dash", line_color="#68d391",
-                  annotation_text=f"Mean: {agg['accuracy_mean']:.1%}")
+    fig.add_trace(go.Scatter(
+        x=fold_nums, y=roc_aucs,
+        name="ROC-AUC",
+        line=dict(color="#ffb547", width=2, dash="dot"),
+        mode="lines+markers",
+        marker=dict(size=6),
+        yaxis="y2",
+        hovertemplate="%{y:.3f}<extra>ROC-AUC</extra>",
+    ))
+
+    fig.add_hline(y=0.5, line_dash="dot", line_color="rgba(255,255,255,0.15)",
+                  annotation_text="Random", annotation_font_size=9,
+                  annotation_font_color="rgba(255,255,255,0.3)")
+    fig.add_hline(y=agg["accuracy_mean"], line_dash="dash", line_color="#00e5a0",
+                  annotation_text=f"Mean {agg['accuracy_mean']:.1%}",
+                  annotation_font_size=9, annotation_font_color="#00e5a0")
+
+    apply_chart_theme(fig, height=260, title="Per-Fold Accuracy & ROC-AUC")
     fig.update_layout(
-        title=dict(text="Accuracy per walk-forward fold", font=dict(size=14, color="#e2e8f0")),
-        height=260,
-        plot_bgcolor="#0d1117",
-        paper_bgcolor="#0d1117",
-        font=dict(color="#a0aec0"),
-        yaxis=dict(gridcolor="rgba(255,255,255,0.05)", range=[0, 1]),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
-        margin=dict(l=10, r=10, t=40, b=10),
-        showlegend=False,
+        yaxis=dict(range=[0.3, 0.85], tickformat=".0%"),
+        yaxis2=dict(overlaying="y", side="right", range=[0.3, 0.9],
+                    showgrid=False, tickformat=".2f",
+                    title="ROC-AUC", titlefont=dict(size=9)),
+        barmode="group",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    # Fold detail table in expander
+    with st.expander("📋  Fold-level detail"):
+        fold_df = pd.DataFrame(folds)[[
+            "fold", "train_size", "test_size",
+            "accuracy", "roc_auc", "f1", "mae", "rmse"
+        ]].copy()
+        fold_df.columns = ["Fold", "Train", "Test", "Accuracy", "ROC-AUC", "F1", "MAE", "RMSE"]
+        for col in ["Accuracy", "F1"]:
+            fold_df[col] = fold_df[col].map("{:.1%}".format)
+        for col in ["ROC-AUC", "MAE", "RMSE"]:
+            fold_df[col] = fold_df[col].map("{:.4f}".format)
+        st.dataframe(fold_df, use_container_width=True, hide_index=True)
 
 
 def render_baseline_comparison(baselines: dict, wf_accuracy: float):
-    st.markdown("""
-    <style>
-    .baseline-note {
-        font-size: 0.8rem;
-        color: rgba(255,255,255,0.45);
-        margin-top: 8px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    rows = []
-    rows.append({"Model": "Random guess", "Accuracy": 0.50, "F1": "—", "Type": "Baseline"})
-
-    naive = baselines.get("naive", {})
-    if naive and "accuracy" in naive:
-        rows.append({"Model": "Naive (momentum)", "Accuracy": naive["accuracy"],
-                     "F1": f"{naive['f1']:.3f}", "Type": "Baseline"})
-
+    rows = [
+        {"Model": "Random Guess",            "Accuracy": 0.50,        "Type": "baseline"},
+        {"Model": "Naive (Momentum)",         "Accuracy": baselines.get("naive", {}).get("accuracy", 0), "Type": "baseline"},
+    ]
     arima = baselines.get("arima", {})
     if arima and "accuracy" in arima:
-        rows.append({"Model": arima.get("model", "ARIMA"), "Accuracy": arima["accuracy"],
-                     "F1": f"{arima.get('f1', 0):.3f}", "Type": "Statistical"})
+        rows.append({"Model": arima.get("model", "ARIMA"), "Accuracy": arima["accuracy"], "Type": "statistical"})
+    rows.append({"Model": "XGBoost (Walk-fwd)", "Accuracy": wf_accuracy, "Type": "ours"})
 
-    rows.append({"Model": "XGBoost (walk-forward)", "Accuracy": wf_accuracy,
-                 "F1": "—", "Type": "Our model"})
-
+    color_map = {"baseline": "#3d4d6b", "statistical": "#ffb547", "ours": "#00e5a0"}
     fig = go.Figure()
-    colors = {"Baseline": "#888", "Statistical": "#f6e05e", "Our model": "#68d391"}
     for row in rows:
         fig.add_trace(go.Bar(
-            x=[row["Model"]],
-            y=[row["Accuracy"]],
-            marker_color=colors.get(row["Type"], "#888"),
-            name=row["Type"],
+            x=[row["Model"]], y=[row["Accuracy"]],
+            marker_color=color_map[row["Type"]],
             showlegend=False,
+            hovertemplate=f"{row['Model']}: %{{y:.1%}}<extra></extra>",
         ))
 
-    fig.add_hline(y=0.5, line_dash="dot", line_color="rgba(255,255,255,0.25)",
-                  annotation_text="50% (random)")
+    fig.add_hline(y=0.5, line_dash="dot", line_color="rgba(255,255,255,0.15)",
+                  annotation_text="Random 50%", annotation_font_size=9,
+                  annotation_font_color="rgba(255,255,255,0.3)")
+
+    apply_chart_theme(fig, height=260, title="XGBoost vs Baselines")
     fig.update_layout(
-        title=dict(text="Model vs baselines", font=dict(size=14, color="#e2e8f0")),
-        height=280,
-        plot_bgcolor="#0d1117",
-        paper_bgcolor="#0d1117",
-        font=dict(color="#a0aec0"),
-        yaxis=dict(gridcolor="rgba(255,255,255,0.05)", range=[0.3, 0.8], title="Accuracy"),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
-        margin=dict(l=10, r=10, t=40, b=10),
+        yaxis=dict(range=[0.3, 0.85], tickformat=".0%", title="Accuracy"),
+        bargap=0.35,
     )
-    st.plotly_chart(fig, use_container_width=True)
-    st.markdown('<p class="baseline-note">Green = our XGBoost model. Yellow = ARIMA statistical baseline. Gray = naive baselines.</p>', unsafe_allow_html=True)
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.caption("🟢 XGBoost (ours)  ·  🟡 ARIMA statistical  ·  ⬛ Naive baselines")
