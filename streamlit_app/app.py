@@ -25,12 +25,17 @@ from components.theme import inject_theme
 inject_theme()
 
 # ── Backend imports ───────────────────────────────────────────────────────────
-from src.ingestion.fetch_realtime import fetch_realtime_data
-from src.features.feature_engineering import engineer_features
-from src.inference.predict import predict
-from src.monitoring.drift_monitor import monitor_drift
-from src.common.config import RAW_DATA_DIR, PROCESSED_DATA_DIR
+# ── Detect if running on Streamlit Cloud ──────────────────────────────────────
+import os
+_IS_CLOUD = os.path.exists("/mount/src")
 
+# ── Backend imports (only loaded locally, not on Streamlit Cloud) ─────────────
+if not _IS_CLOUD:
+    from src.ingestion.fetch_realtime import fetch_realtime_data
+    from src.features.feature_engineering import engineer_features
+    from src.inference.predict import predict
+    from src.monitoring.drift_monitor import monitor_drift
+    from src.common.config import RAW_DATA_DIR, PROCESSED_DATA_DIR
 # ── UI components ─────────────────────────────────────────────────────────────
 from components.sidebar import render_sidebar
 from components.header import render_header
@@ -80,16 +85,66 @@ def build_summary(predictions, interval, horizon) -> dict:
 
 # ── Pipeline execution ────────────────────────────────────────────────────────
 if run_analysis:
-    # ① Fetch data
-    with st.spinner("Fetching market data…"):
-        try:
-            st.session_state.price_data = fetch_realtime_data(
-                ticker=ticker, interval=api_interval_str, force_refresh=True
-            )
-        except Exception as e:
-            st.error(f"**Data fetch failed:** {e}")
-            st.stop()
+    if _IS_CLOUD:
+        # ── Cloud mode: delegate everything to backend API ────────────────
+        with st.spinner("Running analysis via backend API..."):
+            try:
+                import pandas as pd
+                api_resp = get_client().predict(ticker, top_n=500)
+                rows = api_resp.get("predictions", [])
+                df = pd.DataFrame(rows)
+                if not df.empty:
+                    df.rename(columns={"date": "Date"}, inplace=True)
+                    df["prediction"] = (df["direction"] == "UP").astype(int)
+                st.session_state.predictions = df
+                st.session_state.price_data = None  # no price data in cloud mode
+                for k in ["drift", "wf_results", "baselines", "backtest"]:
+                    st.session_state[k] = None
+                bias = api_resp.get("summary", {}).get("bias", "Unknown")
+                st.success(f"✅ Analysis complete — {bias} bias detected.")
+            except APIError as exc:
+                st.error(f"**Backend API error:** {exc.detail}")
+            except Exception as exc:
+                st.error(f"**Error:** {exc}")
+    else:
+        # ── Local mode: run full pipeline directly ────────────────────────
+        with st.spinner("Fetching market data..."):
+            try:
+                st.session_state.price_data = fetch_realtime_data(
+                    ticker=ticker, interval=api_interval_str, force_refresh=True
+                )
+            except Exception as exc:
+                st.error(f"**Data fetch failed:** {exc}")
+                st.stop()
 
+        with st.spinner("Engineering features..."):
+            try:
+                engineer_features(
+                    RAW_DATA_DIR / f"realtime_{ticker}.csv",
+                    PROCESSED_DATA_DIR / f"features_inference_{ticker}.csv",
+                    is_training=False,
+                )
+            except Exception as exc:
+                st.error(f"**Feature engineering failed:** {exc}")
+                st.stop()
+
+        with st.spinner("Running inference..."):
+            try:
+                if _backend_ok:
+                    api_resp = get_client().predict(ticker, top_n=500)
+                    import pandas as pd
+                    df = pd.DataFrame(api_resp.get("predictions", []))
+                    if not df.empty:
+                        df.rename(columns={"date": "Date"}, inplace=True)
+                        df["prediction"] = (df["direction"] == "UP").astype(int)
+                    st.session_state.predictions = df
+                else:
+                    st.session_state.predictions = predict(ticker=ticker)
+                for k in ["drift", "wf_results", "baselines", "backtest"]:
+                    st.session_state[k] = None
+                st.success("✅ Analysis complete.")
+            except Exception as exc:
+                st.warning(f"**Inference failed:** {exc}")
     # ② Engineer features
     with st.spinner("Engineering 40+ technical features…"):
         try:
