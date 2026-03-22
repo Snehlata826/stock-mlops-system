@@ -60,6 +60,10 @@ except ImportError:
 for k in ["price_data","predictions","drift","wf_results","baselines","backtest"]:
     st.session_state.setdefault(k, None)
 
+# ── Active tab memory ─────────────────────────────────────────
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = 0
+
 # ── Backend status ────────────────────────────────────────────
 @st.cache_data(ttl=30)
 def _backend_alive() -> bool:
@@ -160,6 +164,28 @@ if run_analysis:
             except Exception as exc:
                 st.error(f"**Error:** {exc}")
 
+# ── Tab JS injection — remembers active tab after rerun ───────
+st.markdown(f"""
+<script>
+(function() {{
+    var tabIndex = {st.session_state.active_tab};
+    function clickTab() {{
+        var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+        if (tabs.length > tabIndex) {{
+            tabs[tabIndex].click();
+        }}
+    }}
+    if (document.readyState === 'complete') {{
+        setTimeout(clickTab, 200);
+    }} else {{
+        window.addEventListener('load', function() {{
+            setTimeout(clickTab, 200);
+        }});
+    }}
+}})();
+</script>
+""", unsafe_allow_html=True)
+
 # ── Tabs ──────────────────────────────────────────────────────
 tab_price, tab_outlook, tab_validate, tab_backtest, tab_health = st.tabs([
     "📊  Price Action",
@@ -171,6 +197,7 @@ tab_price, tab_outlook, tab_validate, tab_backtest, tab_health = st.tabs([
 
 # ── TAB 1 — Price Action ──────────────────────────────────────
 with tab_price:
+    st.session_state.active_tab = 0
     if st.session_state.price_data is not None and not st.session_state.price_data.empty:
         df          = st.session_state.price_data
         close_last  = df["Close"].iloc[-1]
@@ -193,6 +220,7 @@ with tab_price:
 
 # ── TAB 2 — Model Outlook ─────────────────────────────────────
 with tab_outlook:
+    st.session_state.active_tab = 1
     if st.session_state.predictions is not None \
             and not st.session_state.predictions.empty:
         summary = build_summary(st.session_state.predictions,
@@ -207,16 +235,19 @@ with tab_outlook:
 
 # ── TAB 3 — Validation ────────────────────────────────────────
 with tab_validate:
+    st.session_state.active_tab = 2
     section_header("Walk-Forward Validation", badge="No Data Leakage")
     info_panel("Trains only on past data, tests on future data. "
                "Eliminates leakage from random splits.")
 
     col_ctrl, col_run = st.columns([1, 3])
     with col_ctrl:
-        n_splits = st.selectbox("Folds", [3, 5, 8, 10], index=1)
+        n_splits = st.selectbox("Folds", [3, 5, 8, 10], index=1,
+                                key="wf_folds")
     with col_run:
         st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
-        wf_btn = st.button("▶  Run Walk-Forward Validation", use_container_width=True)
+        wf_btn = st.button("▶  Run Walk-Forward Validation",
+                           use_container_width=True, key="wf_btn")
 
     if wf_btn:
         if not _backend_ok:
@@ -226,7 +257,7 @@ with tab_validate:
                 try:
                     result = get_client().run_walkforward(ticker, n_splits=n_splits)
                     st.session_state.wf_results = result
-                    st.success("Walk-forward validation complete.")
+                    st.success("✅ Walk-forward validation complete.")
                 except APIError as exc:
                     st.error(f"Walk-forward failed: {exc.detail}")
                 except Exception as exc:
@@ -243,7 +274,8 @@ with tab_validate:
     info_panel("Comparing XGBoost against ARIMA and naive baselines. "
                "⚠️ ARIMA takes ~2 minutes to run.")
 
-    bl_btn = st.button("▶  Run Baseline Models", use_container_width=True)
+    bl_btn = st.button("▶  Run Baseline Models",
+                       use_container_width=True, key="bl_btn")
     if bl_btn:
         if not _backend_ok:
             st.error("❌ Backend offline. Start Docker + ngrok.")
@@ -254,7 +286,7 @@ with tab_validate:
                     st.session_state.baselines = result
                     naive_acc = result.get("naive", {}).get("accuracy", 0)
                     arima_acc = result.get("arima", {}).get("accuracy", 0)
-                    st.success(f"Baselines complete — "
+                    st.success(f"✅ Baselines complete — "
                                f"Naive: {naive_acc:.1%} · ARIMA: {arima_acc:.1%}")
                 except APIError as exc:
                     st.error(f"Baselines failed: {exc.detail}")
@@ -272,6 +304,7 @@ with tab_validate:
 
 # ── TAB 4 — Backtest ──────────────────────────────────────────
 with tab_backtest:
+    st.session_state.active_tab = 3
     section_header("Strategy Backtest", badge="Out-of-Sample")
     info_panel("Simulates trading on held-out 20% of training data. "
                "Never seen during model fitting.")
@@ -280,6 +313,7 @@ with tab_backtest:
     with col_strat:
         strategy = st.selectbox(
             "Strategy", ["long_only", "long_short", "buy_and_hold"],
+            key="bt_strategy",
             format_func=lambda x: {
                 "long_only":    "Long Only  (hold cash when bearish)",
                 "long_short":   "Long / Short  (full exposure always)",
@@ -287,7 +321,8 @@ with tab_backtest:
             }[x])
     with col_run_bt:
         st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
-        bt_btn = st.button("▶  Run Backtest", use_container_width=True)
+        bt_btn = st.button("▶  Run Backtest",
+                           use_container_width=True, key="bt_btn")
 
     if bt_btn:
         if not _backend_ok:
@@ -301,7 +336,7 @@ with tab_backtest:
                         "metrics":   api_result["metrics"],
                         "trade_log": tl,
                     }
-                    st.success("Backtest complete.")
+                    st.success("✅ Backtest complete.")
                 except APIError as exc:
                     st.error(f"Backtest failed: {exc.detail}")
                 except Exception as exc:
@@ -315,11 +350,13 @@ with tab_backtest:
 
 # ── TAB 5 — Health ────────────────────────────────────────────
 with tab_health:
+    st.session_state.active_tab = 4
     section_header("Model Health & Data Drift")
     info_panel("Compares current feature distributions against "
                "reference distributions from training time.")
 
-    health_btn = st.button("▶  Check Model Health", use_container_width=True)
+    health_btn = st.button("▶  Check Model Health",
+                           use_container_width=True, key="health_btn")
     if health_btn:
         if not _backend_ok:
             st.error("❌ Backend offline. Start Docker + ngrok.")
@@ -328,7 +365,7 @@ with tab_health:
                 try:
                     result = get_client().run_drift(ticker)
                     st.session_state.drift = result
-                    st.success("Drift analysis complete.")
+                    st.success("✅ Drift analysis complete.")
                 except APIError as exc:
                     st.error(f"Drift monitor failed: {exc.detail}")
                 except Exception as exc:
