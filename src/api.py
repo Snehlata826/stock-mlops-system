@@ -202,36 +202,31 @@ def predict_endpoint(req: PredictRequest):
     )
     
 @app.get("/assets/{ticker}/price")
+@app.get("/assets/{ticker}/price")
 def get_price_data(ticker: str, interval: str = "15min"):
-    """Return OHLCV price data for candlestick chart."""
     ticker = ticker.upper()
     if ticker not in SUPPORTED_ASSETS:
         raise HTTPException(status_code=400, detail=f"Unsupported ticker '{ticker}'")
     try:
-        from src.ingestion.fetch_realtime import fetch_realtime_data
-        df = fetch_realtime_data(ticker=ticker, interval=interval, force_refresh=False)
-        if df.empty:
-            # Fall back to historical data
-            raw_path = Path(f"data/raw/historical_{ticker}.csv")
-            if raw_path.exists():
-                import pandas as pd
-                df = pd.read_csv(raw_path).tail(100)
-            else:
-                raise HTTPException(status_code=404, detail=f"No price data for {ticker}")
-        # Convert to JSON-safe format
-        df["Date"] = df["Date"].astype(str)
-        return {
-            "ticker": ticker,
-            "interval": interval,
-            "n_rows": len(df),
-            "data": df[["Date","Open","High","Low","Close","Volume"]].to_dict(orient="records")
-        }
+        import pandas as pd
+        # Try realtime first, then historical
+        for fname in [f"realtime_{ticker}.csv", f"historical_{ticker}.csv"]:
+            fpath = Path(f"data/raw/{fname}")
+            if fpath.exists():
+                df = pd.read_csv(fpath).tail(200)
+                df["Date"] = df["Date"].astype(str)
+                cols = [c for c in ["Date","Open","High","Low","Close","Volume"] if c in df.columns]
+                return {
+                    "ticker": ticker,
+                    "interval": interval,
+                    "n_rows": len(df),
+                    "data": df[cols].to_dict(orient="records")
+                }
+        raise HTTPException(status_code=404, detail=f"No price data found for {ticker}")
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-
-
 @app.post("/assets/{ticker}/run_pipeline")
 def run_pipeline(ticker: str):
     """Fetch realtime data + engineer features. Call before /predict."""
